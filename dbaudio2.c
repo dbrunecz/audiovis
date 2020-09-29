@@ -1,3 +1,5 @@
+/* Copyright (C) 2020 David Brunecz. Subject to GPL 2.0 */
+
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
