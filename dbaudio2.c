@@ -370,7 +370,7 @@ void tone_populate(int hz, int frames)
 				continue;
 			//f = sinf(2.0f * 3.14159f * (256 + (j * 32)) * p);
 			f = sinf(2.0f * 3.14159f * (1000 * j) * p);
-			tone[2 * i] += (int)transform(-1.0f, 1.0f, f, -12000, 12000);
+			tone[2 * i] += (int)transform(-1.0f, 1.0f, f, -8000, 8000);
 		}
 		tone[2 * i + 1] = tone[2 * i];
 		p += 0.000022f;
@@ -384,6 +384,8 @@ void send_tone(int hz, int frames)
 
 	tone_populate(hz, frames);
 	audio_write(ap, (u8 *)tone, ap->frames * sizeof(s16) * 2 * frames);
+	//usleep(1000 * 26 * frames);
+	usleep(1000 * 25 * frames);
 }
 
 void *thread_routine(void *param)
@@ -394,14 +396,14 @@ void *thread_routine(void *param)
 		snd_pcm_prepare(ap->sp);
 		//for (; do_tone;) {
 		for (; _do_tone();) {
-			send_tone(440, 10);
+			send_tone(440, 3);
 			/*
 			tone_populate();
 			audio_write(ap, (u8 *)tone,
 				//t_sz);
 				ap->frames * sizeof(s16) * 2 * 10);
 			*/
-			usleep(1000 * 260);
+			//usleep(1000 * 260);
 		}
 		snd_pcm_drop(ap->sp);
 
@@ -689,7 +691,7 @@ void display_spectrum(struct dbx *d, struct audioparam *ap, s16 *b)
 	dbx_draw_string(d, wd / 2, ht - 10, "kHz", 3, RGB(100, 100, 100));
 	//for (i = 0; i < 40; i++) {
 	//	v = 0.031133 * 500 * i;
-	for (i = 0; i < 10; i++) {
+	for (i = 0; i < 12; i++) {
 		v = 0.031133 * 1000 * i;
 		//x = transform(0, ap->frames / 2, v,
 		x = transform(SKIP_END_FRAMES, s - SKIP_END_FRAMES, v,
