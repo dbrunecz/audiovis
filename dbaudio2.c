@@ -18,6 +18,54 @@
 
 #include "dbx.h"
 
+/******************************************************************************/
+
+#include	<math.h>
+
+#define FLOAT	float
+#define SIN	sinf
+#define COS	cosf
+#define POW	powf
+
+void complex_dft(int cnt, FLOAT *tre, FLOAT *tim, FLOAT *fre, FLOAT *fim)
+{
+	FLOAT a = 2 * M_PI / (FLOAT) cnt;
+	FLOAT re, im;
+	int f, t;
+
+	memset(fre, 0, sizeof(*fre) * cnt);
+	memset(fim, 0, sizeof(*fim) * cnt);
+
+	for (f = 0; f < cnt; f++) {
+		for (t = 0; t < cnt; t++) {
+			re = COS(a * f * t);
+			im = -1.0 * SIN(a * f * t);
+			fre[f] += re * tre[t] - im * tim[t];
+			fim[f] += im * tre[t] + re * tim[t];
+		}
+	}
+}
+
+void complex_idft(int cnt, FLOAT *tre, FLOAT *tim, FLOAT *fre, FLOAT *fim)
+{
+	int i;
+
+	//memset(tre, 0, sizeof(*tre) * cnt);
+	//memset(tim, 0, sizeof(*tim) * cnt);
+
+	for (i = 0; i < cnt; i++)
+		fim[i] *= -1.0f;
+
+	complex_dft(cnt, fre, fim, tre, tim);
+
+	for (i = 0; i < cnt; i++) {
+		tre[i] = tre[i] / (FLOAT)cnt;
+		tim[i] = tim[i] / (cnt * -1.0f);
+	}
+}
+
+/******************************************************************************/
+
 int _random(int min, int max)
 {
 	static int once;
@@ -427,6 +475,69 @@ void random_color(u32 *c)
 	}
 }
 
+float *do_dft(s16 *b, int count)
+{
+	static FLOAT *tre;
+	static FLOAT *tim;
+	static FLOAT *fre;
+	static FLOAT *fim;
+	int i;
+
+	if (!tre) {
+		tre = malloc(sizeof(*tre) * count);
+		tim = malloc(sizeof(*tim) * count);
+		fre = malloc(sizeof(*fre) * count);
+		fim = malloc(sizeof(*fim) * count);
+	}
+
+	memset(tim, 0, sizeof(*tim) * count);
+	for (i = 0; i < count; i++)
+		tre[i] = transform(-32767, 32766, b[i], -1.0, 1.0);
+	complex_dft(count, tre, tim, fre, fim);
+
+		//(FLOAT) i / (FLOAT) duration,
+	for (i = 0; i < count / 2; i++)
+		fre[i] = 0.5f * POW(fre[i] * fre[i] + fim[i] * fim[i], 0.5f);
+	return fre;
+}
+
+#define DFT_BORDER		80
+#define SKIP_END_FRAMES		70
+void display_spectrum(struct dbx *d, struct audioparam *ap, s16 *b)
+{
+	int ht = dbx_height(d);
+	int wd = dbx_width(d);
+	int px = DFT_BORDER, py = -1;
+	int x, y, i;
+	float fmin, fmax, fs, fy, v;
+
+	float *f = do_dft(b, ap->frames);
+
+	fmin = 1000.0f;
+	fmax = 0.0f;
+	for (i = SKIP_END_FRAMES; i < ap->frames / 2 - SKIP_END_FRAMES; i++) {
+		if (f[i] > fmax)
+			fmax = f[i];
+		if (f[i] < fmin)
+			fmin = f[i];
+	}
+
+	for (x = DFT_BORDER; x < wd - DFT_BORDER; x++) {
+		fs = transform(DFT_BORDER, wd - DFT_BORDER, x,
+				SKIP_END_FRAMES, ap->frames / 2 - SKIP_END_FRAMES);
+		v = f[(int)fs];
+
+		fy = transform(fmin, fmax, v, ht - 40, ht - 120);
+		y = (int)fy;
+		if (py < 0)
+			py = y;
+
+		dbx_draw_line(d, px, py, x, y, GREEN1);
+		px = x;
+		py = y;
+	}
+}
+
 static int state_update(struct dbx *d)
 {
 	struct audioparam *ap = &g_in_ap;
@@ -470,6 +581,8 @@ static int state_update(struct dbx *d)
 		px = x;
 		py = y;
 	}
+
+	display_spectrum(d, ap, b);
 
 	do_xps(d);
 
