@@ -333,13 +333,13 @@ int t_sz;
 
 volatile int do_tone;
 
-int tones[10];
+int tones[11];
 
 int _do_tone(void)
 {
 	int j;
 
-	for (j = 0; j < 10; j++)
+	for (j = 0; j < ARRAY_SIZE(tones); j++)
 		if (tones[j])
 			return 1;
 	return 0;
@@ -365,10 +365,11 @@ void tone_populate(int hz, int frames)
 		p += 0.000022f;
 #else
 		tone[2 * i] = 0.0;
-		for (j = 0; j < 10; j++) {
+		for (j = 0; j < ARRAY_SIZE(tones); j++) {
 			if (!tones[j])
 				continue;
-			f = sinf(2.0f * 3.14159f * 150 * (j + 2) * p);
+			//f = sinf(2.0f * 3.14159f * (256 + (j * 32)) * p);
+			f = sinf(2.0f * 3.14159f * (1000 * j) * p);
 			tone[2 * i] += (int)transform(-1.0f, 1.0f, f, -12000, 12000);
 		}
 		tone[2 * i + 1] = tone[2 * i];
@@ -500,9 +501,10 @@ static int key(struct dbx *d, int code, int key, int press)
 	case 'q':
 		return -1;
 	default:
-		if (key >= '0' && key <= '9') {
+		if (key == '0')
+			tones[10] = press;
+		if (key >= '1' && key <= '9')
 			tones[key - '0'] = press;
-		}
 	}
 	return 0;
 }
@@ -653,8 +655,8 @@ void display_spectrum(struct dbx *d, struct audioparam *ap, s16 *b)
 	//static float fmax;
 	float fs, fy, v;
 	float _fmax = 10.0;
-
 	float *f = do_dft(b, ap->frames);
+	char str[3];
 
 	s = ap->frames / 4;
 	for (i = SKIP_END_FRAMES; i < s - SKIP_END_FRAMES; i++) {
@@ -677,6 +679,33 @@ void display_spectrum(struct dbx *d, struct audioparam *ap, s16 *b)
 		dbx_draw_line(d, px, py, x, y, GREEN1);
 		px = x;
 		py = y;
+	}
+
+	/*
+		period  = 0.031133 sec
+		samples = 1373 (686)
+		f = s / 0.031
+	*/
+	dbx_draw_string(d, wd / 2, ht - 10, "kHz", 3, RGB(100, 100, 100));
+	//for (i = 0; i < 40; i++) {
+	//	v = 0.031133 * 500 * i;
+	for (i = 0; i < 10; i++) {
+		v = 0.031133 * 1000 * i;
+		//x = transform(0, ap->frames / 2, v,
+		x = transform(SKIP_END_FRAMES, s - SKIP_END_FRAMES, v,
+				DFT_BORDER, wd - DFT_BORDER);
+
+		dbx_draw_line(d, x, ht - 34, x, ht - 40, RGB(255, 255, 255));
+
+		snprintf(str, 3, "%u", i);
+		dbx_draw_string(d, x - 3, ht - 20, str, strlen(str),
+				RGB(100, 100, 100));
+		/*if (i == 0)
+			dbx_draw_string(d, x - 3, ht - 20, "0", 1, RGB(100, 100, 100));
+		if (i == 2)
+			dbx_draw_string(d, x, ht - 20, "1", 1, RGB(100, 100, 100));
+		if (i == 10)
+			dbx_draw_string(d, x, ht - 20, "5", 1, RGB(100, 100, 100));*/
 	}
 }
 
