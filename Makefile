@@ -2,7 +2,9 @@
 #sudo apt-get install libasound2-dev
 
 CFLAGS+= `pkg-config --cflags alsa`
-CFLAGS+= -Wall -Werror -ggdb
+CFLAGS+= -Wall -Werror
+#CFLAGS+= -ggdb
+CFLAGS+= -Os
 
 LDFLAGS+= -L/usr/X11R6/lib
 

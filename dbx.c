@@ -345,6 +345,14 @@ int dbx_set_foreground(struct dbx *d, u32 rgb)
 	return 0;
 }
 
+int dbx_draw_rectangle(struct dbx *d, int x, int y, int wd, int ht, u32 rgb)
+{
+	dbx_set_foreground(d, rgb);
+	if (!XDrawRectangle(d->display, d->pixmap, d->gc, x, y, wd, ht))
+		printf("%s:%d %s()\n", __FILE__, __LINE__, __func__);
+	return 0;
+}
+
 int dbx_fill_rectangle(struct dbx *d, int x, int y, int wd, int ht,
 		    u32 rgb)
 {

@@ -44,6 +44,7 @@ int dbx_width(struct dbx *d);
 int dbx_height(struct dbx *d);
 
 int dbx_blank_pixmap(struct dbx *d);
+int dbx_draw_rectangle(struct dbx *d, int x, int y, int wd, int ht, u32 rgb);
 int dbx_fill_rectangle(struct dbx *d, int x, int y, int wd, int ht, u32 rgb);
 int dbx_fill_circle(struct dbx *d, int x, int y, int dia, u32 rgb);
 int dbx_draw_string(struct dbx *d, int x, int y, const char *s, size_t len, u32 rgb);

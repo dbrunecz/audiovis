@@ -22,7 +22,85 @@
 
 /******************************************************************************/
 
-#include	<math.h>
+typedef struct {
+	float Re, Im;
+} complex;
+
+void fft(complex *v, int n, complex *tmp)
+{
+	complex z, w, *vo, *ve;
+	int k, m;
+
+	if (n <= 1)
+		return;
+
+	ve = tmp;
+	vo = tmp + n / 2;
+	for (k = 0; k < n / 2; k++) {
+		ve[k] = v[2 * k];
+		vo[k] = v[2 * k + 1];
+	}
+
+	fft(ve, n / 2, v);
+	fft(vo, n / 2, v);
+
+	for (m = 0; m < n / 2; m++) {
+		w.Re =  cos(2 * M_PI * m / (double)n);
+		w.Im = -sin(2 * M_PI * m / (double)n);
+		z.Re = w.Re * vo[m].Re - w.Im * vo[m].Im;
+		z.Im = w.Re * vo[m].Im + w.Im * vo[m].Re;
+		v[m        ].Re = ve[m].Re + z.Re;
+		v[m        ].Im = ve[m].Im + z.Im;
+		v[m + n / 2].Re = ve[m].Re - z.Re;
+		v[m + n / 2].Im = ve[m].Im - z.Im;
+	}
+}
+
+#if 0
+void _ifft(complex *v, int n, complex *tmp)
+{
+	complex z, w, *vo, *ve;
+	int k, m;
+
+	if (n <= 1)
+		return;
+
+	ve = tmp;
+	vo = tmp + n / 2;
+	for (k = 0; k < n / 2; k++) {
+		ve[k] = v[2 * k];
+		vo[k] = v[2 * k + 1];
+	}
+
+	_ifft(ve, n / 2, v);
+	_ifft(vo, n / 2, v);
+
+	for (m = 0; m < n / 2; m++) {
+		w.Re = cos(2 * M_PI * m / (double)n);
+		w.Im = sin(2 * M_PI * m / (double)n);
+		z.Re = w.Re * vo[m].Re - w.Im * vo[m].Im;
+		z.Im = w.Re * vo[m].Im + w.Im * vo[m].Re;
+		v[m        ].Re = ve[m].Re + z.Re;
+		v[m        ].Im = ve[m].Im + z.Im;
+		v[m + n / 2].Re = ve[m].Re - z.Re;
+		v[m + n / 2].Im = ve[m].Im - z.Im;
+	}
+}
+
+void ifft(complex *v, int n, complex *tmp)
+{
+	int i;
+
+	_ifft(v, n, tmp);
+	for (i = 0; i < n; i++) {
+		v[i].Re /= n;
+		v[i].Im /= n;
+	}
+}
+#endif
+
+//#define NO_FFT
+#ifdef NO_FFT
 
 #define FLOAT	float
 #define SIN	sinf
@@ -52,9 +130,6 @@ void complex_idft(int cnt, FLOAT *tre, FLOAT *tim, FLOAT *fre, FLOAT *fim)
 {
 	int i;
 
-	//memset(tre, 0, sizeof(*tre) * cnt);
-	//memset(tim, 0, sizeof(*tim) * cnt);
-
 	for (i = 0; i < cnt; i++)
 		fim[i] *= -1.0f;
 
@@ -65,6 +140,7 @@ void complex_idft(int cnt, FLOAT *tre, FLOAT *tim, FLOAT *fre, FLOAT *fim)
 		tim[i] = tim[i] / (cnt * -1.0f);
 	}
 }
+#endif /* NO_FFT */
 
 /******************************************************************************/
 
@@ -257,14 +333,28 @@ int t_sz;
 
 volatile int do_tone;
 
+int tones[10];
+
+int _do_tone(void)
+{
+	int j;
+
+	for (j = 0; j < 10; j++)
+		if (tones[j])
+			return 1;
+	return 0;
+}
+
 void tone_populate(int hz, int frames)
 {
 	struct audioparam *ap = &g_out_ap;
 	static float p = 0.000022f;
 	float f;
 	int i;
+	int j;
 
 	for (i = 0; i < ap->frames * frames; i++) {
+#if 0
 		//f = sinf(2.0f * 3.14159f * 1000 * p);
 		//tone[2 * i] = (int)transform(-1.0f, 1.0f, f, -22000, 22000);
 		//f = sinf(2.0f * 3.14159f * 200 * p);
@@ -273,6 +363,17 @@ void tone_populate(int hz, int frames)
 		tone[2 * i] = (int)transform(-1.0f, 1.0f, f, -32000, 32000);
 		tone[2 * i + 1] = tone[2 * i];
 		p += 0.000022f;
+#else
+		tone[2 * i] = 0.0;
+		for (j = 0; j < 10; j++) {
+			if (!tones[j])
+				continue;
+			f = sinf(2.0f * 3.14159f * 150 * (j + 2) * p);
+			tone[2 * i] += (int)transform(-1.0f, 1.0f, f, -12000, 12000);
+		}
+		tone[2 * i + 1] = tone[2 * i];
+		p += 0.000022f;
+#endif
 	}
 }
 
@@ -290,7 +391,8 @@ void *thread_routine(void *param)
 
 	for ( ;; ) {
 		snd_pcm_prepare(ap->sp);
-		for (; do_tone;) {
+		//for (; do_tone;) {
+		for (; _do_tone();) {
 			send_tone(440, 10);
 			/*
 			tone_populate();
@@ -302,16 +404,18 @@ void *thread_routine(void *param)
 		}
 		snd_pcm_drop(ap->sp);
 
-		for (; !do_tone;)
+		for (; !_do_tone();)
+		//for (; !do_tone;)
 			usleep(1000 * 50);
 	}
 	return NULL;
 }
 
-void tone_out(int hz)
+//void tone_out(int hz)
+void tone_out(void)
 {
 	struct audioparam *ap = &g_out_ap;
-	//pthread_t tid;
+	pthread_t tid;
 
 	if (!tone) {
 		t_sz = ap->frames * sizeof(s16) * 2 * 30;
@@ -323,10 +427,10 @@ void tone_out(int hz)
 			exit(0);
 		}
 		//  //tone_populate();
-		//pthread_create(&tid, NULL, thread_routine, NULL);
+		pthread_create(&tid, NULL, thread_routine, NULL);
 	}
 
-	send_tone(hz, 10);
+	//send_tone(hz, 10);
 	//audio_write(ap, (u8 *)tone, t_sz);//sizeof(tone));
 }
 
@@ -374,12 +478,14 @@ static int key(struct dbx *d, int code, int key, int press)
 			fg_n_bg = !fg_n_bg;
 		break;
 
-	//case '0':
-	//	if (press)
-	//		do_tone = !do_tone;
-	//	break;
+/*
+	case '0':
+		if (press)
+			do_tone = !do_tone;
+		break;
 
-	case '1': if (press) tone_out(80); break;
+	//case '1': if (press) tone_out(80); break;
+
 	case '2': if (press) tone_out(180); break;
 	case '3': if (press) tone_out(280); break;
 	case '4': if (press) tone_out(380); break;
@@ -388,10 +494,15 @@ static int key(struct dbx *d, int code, int key, int press)
 	case '7': if (press) tone_out(680); break;
 	case '8': if (press) tone_out(780); break;
 	case '9': if (press) tone_out(880); break;
-	case '0': if (press) tone_out(980); break;
+*/
+	//case '0': if (press) tone_out(980); break;
 
 	case 'q':
 		return -1;
+	default:
+		if (key >= '0' && key <= '9') {
+			tones[key - '0'] = press;
+		}
 	}
 	return 0;
 }
@@ -477,6 +588,7 @@ void random_color(u32 *c)
 	}
 }
 
+#ifdef NO_FFT
 float *do_dft(s16 *b, int count)
 {
 	static FLOAT *tre;
@@ -502,34 +614,62 @@ float *do_dft(s16 *b, int count)
 		fre[i] = 0.5f * POW(fre[i] * fre[i] + fim[i] * fim[i], 0.5f);
 	return fre;
 }
+#else
+float *do_dft(s16 *b, int count)
+{
+	static complex *c;
+	static complex *t;
+	static float *r;
+	int i;
+
+	count /= 2;
+	if (!c) {
+		c = malloc(sizeof(*c) * count);
+		t = malloc(sizeof(*t) * count);
+		r = malloc(sizeof(*r) * count);
+	}
+	for (i = 0; i < count; i++) {
+		c[i].Re = transform(-32767, 32766, b[2 * i], -1.0, 1.0);
+		c[i].Im = 0;
+	}
+	fft(c, count, t);
+	for (i = 0; i < count; i++)
+		r[i] = fabs(c[i].Re) + fabs(c[i].Im);
+	return r;
+}
+#endif
 
 #define DFT_BORDER		80
-#define SKIP_END_FRAMES		70
+#define SKIP_END_FRAMES		3
+
+//static float _fmax = 10.0;
+//static float _fmax = 1300.0;
 void display_spectrum(struct dbx *d, struct audioparam *ap, s16 *b)
 {
 	int ht = dbx_height(d);
 	int wd = dbx_width(d);
 	int px = DFT_BORDER, py = -1;
-	int x, y, i;
-	float fmin, fmax, fs, fy, v;
+	int x, y, s, i;
+	//static float fmax;
+	float fs, fy, v;
+	float _fmax = 10.0;
 
 	float *f = do_dft(b, ap->frames);
 
-	fmin = 1000.0f;
-	fmax = 0.0f;
-	for (i = SKIP_END_FRAMES; i < ap->frames / 2 - SKIP_END_FRAMES; i++) {
-		if (f[i] > fmax)
-			fmax = f[i];
-		if (f[i] < fmin)
-			fmin = f[i];
+	s = ap->frames / 4;
+	for (i = SKIP_END_FRAMES; i < s - SKIP_END_FRAMES; i++) {
+		if (f[i] > _fmax)
+			_fmax = f[i];
 	}
 
 	for (x = DFT_BORDER; x < wd - DFT_BORDER; x++) {
 		fs = transform(DFT_BORDER, wd - DFT_BORDER, x,
-				SKIP_END_FRAMES, ap->frames / 2 - SKIP_END_FRAMES);
+				SKIP_END_FRAMES, s - SKIP_END_FRAMES);
 		v = f[(int)fs];
 
-		fy = transform(fmin, fmax, v, ht - 40, ht - 120);
+		if (v > _fmax)
+			v = _fmax;
+		fy = transform(0, _fmax, v, ht - 40, ht - 220);
 		y = (int)fy;
 		if (py < 0)
 			py = y;
@@ -548,7 +688,7 @@ static int state_update(struct dbx *d)
 	float fs, fy;
 	s16 *b;
 	int x, y, v;
-	int px = 0, py = ht / 2;
+	int px, py = ht / 2;
 
 	b = audio_read(ap);
 	if (!b)
@@ -565,9 +705,14 @@ static int state_update(struct dbx *d)
 		random_color(&bg_color);
 
 	dbx_fill_rectangle(d, 0, 0, wd, ht, bg_color);
+	dbx_draw_rectangle(d, 0, 0, wd - 1, ht - 1, RGB(40, 40, 40));
 
-	for (x = 0; x < wd; x++) {
-		fs = transform(0, wd, x, 0, ap->frames);
+#define BRDR	30
+	px = -1;
+	for (x = BRDR; x < wd - BRDR; x++) {
+		if (px < 0)
+			px = x;
+		fs = transform(BRDR, wd - BRDR, x, 0, ap->frames);
 		v = b[(int)fs];
 
 		int_mod(&v, -32767, 32766, v * display_amp());
@@ -631,7 +776,7 @@ int main(int argc, char *argv[])
 		printf("%s:%d %s()\n", __FILE__, __LINE__, __func__);
 		exit(0);
 	}
-	//tone_out();
+	tone_out();
 
 	dbx_run(argc, argv, &ops, UPDATE_PERIOD_MS);
 
